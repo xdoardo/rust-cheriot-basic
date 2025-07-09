@@ -19,7 +19,7 @@ $ cd rust && ./gen_bootstrap.sh
 
 3. Build the compiler and needed libraries: 
 ```sh
-$ ./x build compiler core panic_abort --target=riscv32cheriot-unknown-cheriotrtos
+$ ./x build compiler core alloc --target=riscv32cheriot-unknown-cheriotrtos
 ```
 
 4. Link the toolchain with rustup: 
@@ -36,41 +36,45 @@ $ cd rust-cheriot-basic && cargo +cheriot build --release  --target=riscv32cheri
 
 The goal of this example is that of producing a working `rustc` compiler that
 can compile simple programs to CHERIoT. We expect this crate to be compiled to
-an `.s` library with the symbols for the defined functions. 
+a static (`.s`) library with the symbols for the defined functions. 
 
 You should then be able to link the generated `.s` library with an RTOS program
-that uses these functions. The test I ran looks like this: 
-```cpp
-extern "C" int                zero();
-extern "C" int                add(int a, int b);
-extern "C" long long unsigned div(long long unsigned a, long long unsigned b);
+that uses these functions. The file `rust-test.cc` shows an example of how to
+use this library from RTOS: you should be able to add it as a test in
+`cheriot-rtos/tests` and run it. Does it work? :) 
 
-#include "cheri.hh"
-#define TEST_NAME "RUST"
-#include "tests.hh"
-
-int test_rust()
-{
-	int zero_from_rust = zero();
-	debug_log("Got zero from rust: {}", zero_from_rust);
-
-	int add_from_rust = add(4, 2);
-	debug_log("Got add from rust: {}", add_from_rust);
-
-	long long unsigned div_from_rust = div(4, 2);
-	debug_log("Got div from rust: {}", div_from_rust);
-
-	return 0;
-}
-```
-
+## Note 
 I got `xmake` to build it successfully by changing
-```lua
-batchcmds:vrunv(target:tool("ld"), table.join({"--script=" .. linkerscript, "--compartment", "--gc-sections", "--relax", "-o", target:targetfile()}, target:objectfiles()), opt)
+```diff
+--- a/sdk/xmake.lua
++++ b/sdk/xmake.lua
+@@ -202,7 +202,7 @@ rule("cheriot.component")
+ 		-- Link using the compartment's linker script.
+ 		batchcmds:show_progress(opt.progress, "linking " .. target:get("cheriot.type") .. ' ' .. target:filename())
+ 		batchcmds:mkdir(target:targetdir())
+-		batchcmds:vrunv(target:tool("ld"), table.join({"--script=" .. linkerscript, "--compartment", "--gc-sections", "--relax", "-o", target:targetfile()}, target:objectfiles()), opt)
++		batchcmds:vrunv(target:tool("ld"), table.join({"--script=" .. linkerscript, "-L<path_to_rust_lib>", "-lrust_cheriot_basic", "--compartment", "--gc-sections", "--relax", "-o", target:targetfile()}, target:objectfiles()), opt)
+ 		-- This depends on all of the object files and the linker script.
+ 		batchcmds:add_depfiles(linkerscript)
+ 		batchcmds:add_depfiles(target:objectfiles())
 ```
-to
-```lua
-batchcmds:vrunv(target:tool("ld"), table.join({"--script=" .. linkerscript, "-L<path_to_rust_cheriot_basic_dir>", "-lrust_cheriot_basic", "--compartment", "--gc-sections", "--relax", "-o", target:targetfile()}, target:objectfiles()), opt)
+in `cheriot-rtos/sdk/xmake.lua`.
+
+You will also have to add the relevant `test(...)` settings in
+`cheriot-rtos/tests/xmake.lua`, and add a matching call to `test_rust` in
+`test-runner.cc`. Another important addition is that of giving more stack size to the tests: 
+```diff
+@@ -142,7 +146,7 @@ firmware("test-suite")
+                 compartment = "test_runner",
+                 priority = 3,
+                 entry_point = "run_tests",
+-                stack_size = 0x800,
++                stack_size = 0x1F00,
+                 -- This must be an odd number for the trusted stack exhaustion
+                 -- test to fail in the right compartment.
+                 trusted_stack_frames = 9
 ```
-in `cheriot-rtos/sdk/xmake.lua`, and adding the relevant `test(...)` settings
-in `cheriot-rtos/tests/xmake.lua`.
+
+
+Ideally, when this is a bit more tested, we can have this
+crate as part of the RTOS tests, and make all of this easier.

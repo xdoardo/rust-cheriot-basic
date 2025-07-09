@@ -12,3 +12,6 @@ panic = 'abort'
 
 [profile.dev]
 panic = 'abort'
+
+[dependencies]
+rand = { version = "0.9.1", default-features = false, features = ["small_rng"] }
