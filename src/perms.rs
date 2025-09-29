@@ -152,7 +152,7 @@ macro_rules! perms {
 
 pub use perms;
 
-unsafe extern "cheri-libcall" {
+unsafe extern "cherilibcallcc" {
     #[link_name = "_Z13check_pointerPKvjjb"]
     pub fn _check_pointer(
         ptr: *const core::ffi::c_void,

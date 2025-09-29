@@ -1,6 +1,6 @@
 #![no_std]
 #![no_main]
-#![feature(abi_cherilibcall)]
+#![feature(abi_chericc)]
 
 use rtos_utils::cheriot_panic;
 
